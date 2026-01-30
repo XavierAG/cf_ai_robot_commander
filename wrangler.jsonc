@@ -16,6 +16,12 @@
 			}
 		]
   },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["RobotMemory"]
+    }
+  ],
 	"workflows": [
 		{
 			"name": "mission_engine",
