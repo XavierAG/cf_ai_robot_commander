@@ -7,6 +7,22 @@
 	"name": "robot-command-center",
 	"main": "src/index.ts",
 	"compatibility_date": "2026-01-28",
+	"ai": { "binding": "AI" },
+	"durable_objects": {
+    	"bindings": [
+			{
+				"name": "ROBOT_MEMORY",
+				"class_name": "RobotMemory" 
+			}
+		]
+  },
+	"workflows": [
+		{
+			"name": "mission_engine",
+			"binding": "MISSION_WORKFLOW",
+			"class_name": "MissionWorkflow"
+		}
+	],
 	"observability": {
 		"enabled": true
 	}
