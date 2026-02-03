@@ -27,8 +27,25 @@ npm install
 npx wrangler login
 npx wrangler deploy
 ```
-### 3. Deplot Frontend
-The easiest way is to connect your GitHub repository to Cloudflare Pages via the dashboard.
+## 🖥️ Frontend Configuration
+
+Before deploying the dashboard to Cloudflare Pages, you must point the frontend to **your own** Cloudflare Worker URL.
+
+### 1. Update the Connection URLs
+Open `index.html` and update the following constants at the top of the `<script>` tag:
+
+```javascript
+// Change these to your deployed Worker's domain
+const WORKER_URL = "wss://YOUR-WORKER-NAME.YOUR-SUBDOMAIN.workers.dev/ws?robotId=CENTRAL_HUB";
+const API_BASE = "[https://YOUR-WORKER-NAME.YOUR-SUBDOMAIN.workers.dev/api](https://YOUR-WORKER-NAME.YOUR-SUBDOMAIN.workers.dev/api)";
+```
+### 2. Update Connection URLs
+Before deploying, you must point the frontend to **your own** Cloudflare Worker backend. Open `index.html` and search for the following lines to replace them with your deployed Worker URL:
+
+* **WebSockets**: Replace `wss://robot-command-center.xavierart2001.workers.dev/ws...` with your socket URL.
+* **API Calls**: Replace any `fetch` calls currently pointing to `https://robot-command-center.xavierart2001.workers.dev/api/...` with your own API base URL.
+
+### 3. Deploy to Cloudflare Pages
 
 ---
 
