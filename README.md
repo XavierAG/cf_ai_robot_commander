@@ -1,19 +1,46 @@
+# 🤖 Robot Command Center
 
-# Prerequisites
-Cloudflare Account (Free tier works perfectly).
-Node.js installed on your machine.
+Welcome to the **Robot Command Center**, an autonomous fleet management system powered by AI. 
+Create your robots, assign them specialized roles, and deploy them to tasks using natural language. Whether there's a spill in the kitchen or a logic error in the lab, simply ask the **Robot Commander** to send help, and it will dispatch the best bot for the job. 
+I hope you enjoy my mini project and feel free to leave a cool robot for others to see!
 
-# Setup
+## 🚀 Live Demo
+Access the live fleet dashboard here:  
+👉 **[https://cf-ai-robot-commander.pages.dev/](https://cf-ai-robot-commander.pages.dev/)**
 
-## Clone the repository
-git clone <https://github.com/XavierAG/cf_ai_robot_commander.git>
+---
+
+## 🛠️ Prerequisites
+* **Cloudflare Account**: [Sign up here](https://dash.cloudflare.com/sign-up) (Free tier supported).
+* **Node.js**: Version 18+ installed.
+
+## ⚙️ Setup & Deployment
+
+### 1. Clone & Install
+```bash
+git clone https://github.com/XavierAG/cf_ai_robot_commander.git
 cd robot-command-center
-
-## Install dependencies
 npm install
-
-## Login to Cloudflare
+```
+### 2. Deploy Backend
+```bash
 npx wrangler login
+npx wrangler deploy
+```
+### 3. Deplot Frontend
+The easiest way is to connect your GitHub repository to Cloudflare Pages via the dashboard.
+
+---
+
+## 🛰️ System Architecture
+
+Our backend architecture ensures that robot states are persistent and movements are smooth.
+
+1.  **Durable Object (`RobotMemory`)**: A stateful SQLite database that stores room coordinates, robot roles, and current positions.
+2.  **Workflow (`MissionWorkflow`)**: A long-running process that manages robot travel time, calculates Euclidean distance, and emits updates every second.
+3.  **Real-time Bus**: The Durable Object broadcasts every movement update to all connected WebSockets, allowing the dashboard to render across the map.
+
+---
 
 ## 📡 API Reference
 
@@ -32,17 +59,6 @@ The Command Center utilizes a RESTful API built on **Hono** and **Chanfana (Open
 
 ---
 
-## 🛰️ System Architecture
-
-Our backend architecture ensures that robot states are persistent and movements are smooth.
-
-
-
-1.  **Durable Object (`RobotMemory`)**: A stateful SQLite database that stores room coordinates, robot roles, and current positions.
-2.  **Workflow (`MissionWorkflow`)**: A long-running process that manages robot travel time, calculates Euclidean distance, and emits "heartbeat" updates every second.
-3.  **Real-time Bus**: The Durable Object broadcasts every movement update to all connected WebSockets, allowing the dashboard to render a smooth "glide" across the map.
-
----
 
 ## 🛠️ Testing with cURL
 
@@ -58,5 +74,5 @@ curl -X POST https://<your-worker>.workers.dev/api/rooms \
 ```bash
 curl -X POST https://<your-worker>.workers.dev/api/command \
      -H "Content-Type: application/json" \
-     -d '{"prompt": "Send Billy to the Lab to analyze samples"}'
+     -d '{"prompt": "Send Billy to help in the kitchen}'
 ```
