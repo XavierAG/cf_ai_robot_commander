@@ -30,18 +30,31 @@ export class RobotCommand extends OpenAPIRoute {
       properties: {
         intent: { type: "string", enum: ["MISSION", "CHAT"] },
         robot: { type: "string" },
+        destination: { type: "string" },
         task: { type: "string" }
       },
-      required: ["intent", "robot", "task"]
+      required: ["intent", "robot", "destination", "task"]
     };
+const hub = env.ROBOT_MEMORY.get(env.ROBOT_MEMORY.idFromName("CENTRAL_HUB"));
+const worldData = await (await hub.fetch("http://do/map")).json();
 
-    const aiResponse = await env.AI.run('@cf/meta/llama-3.3-70b-instruct-fp8-fast', {
-      messages: [
-        { role: 'system', content: 'You are a Robot Command AI. Output ONLY valid JSON. No conversational text.' },
-        { role: 'user', content: data.body.prompt }
-      ],
-      response_format: { type: "json_schema", json_schema: jsonSchema }
-    });
+const aiResponse = await env.AI.run('@cf/meta/llama-3.3-70b-instruct-fp8-fast', {
+  messages: [
+    { 
+      role: 'system', 
+      content: `You are the Robot Commander. 
+      CURRENT FLEET ROLES: ${JSON.stringify(worldData.roles)}
+      AVAILABLE ROOMS: ${JSON.stringify(worldData.rooms)}
+      
+      If a user asks to move to a room not listed, tell them you can't find it.
+      If a task doesn't match a robot's role, suggest the correct robot.
+      
+      Respond in JSON: {"intent": "MISSION", "robot": "Name", "destination": "Room", "task": "Description"}` 
+    },
+    { role: 'user', content: data.body.prompt }
+  ],
+  response_format: { type: "json_schema", json_schema: jsonSchema }
+});
 
     let decision;
     try {
@@ -55,8 +68,12 @@ export class RobotCommand extends OpenAPIRoute {
 
     if (decision.intent === "MISSION") {
       const mission = await env.MISSION_WORKFLOW.create({
-        params: { robotId: decision.robot || "Alpha-1", task: decision.task }
-      });
+        params: { 
+          robotId: decision.robot || "Alpha-1", 
+          task: decision.task,
+          destination: decision.destination || "Spawner"
+        }
+    });
       return { 
         message: `Mission sequence initiated: ${decision.task} for ${decision.robot}`, 
         missionId: mission.id 
