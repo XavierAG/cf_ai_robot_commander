@@ -162,21 +162,21 @@
             drawMap(rooms);
         }
         socket.onmessage = (event) => {
-    const data = JSON.parse(event.data);
-    const { robotId, action, progress, destination } = data;
+            const data = JSON.parse(event.data);
+            const { robotId, action, progress, destination, startPos } = data;
 
-    if (!robots[robotId]) {
-        const card = document.createElement('div');
-        card.className = 'robot-card';
-        card.innerHTML = `
-            <h3>🤖 ${robotId}</h3>
-            <div class="progress-bg"><div id="fill-${robotId}" class="progress-fill"></div></div>
-            <p id="status-${robotId}">${action}</p>
-            <div id="log-${robotId}" class="log"></div>
-        `;
-        fleet.appendChild(card);
-        robots[robotId] = card;
-    }
+            if (!robots[robotId]) {
+            const card = document.createElement('div');
+            card.className = 'robot-card';
+            card.innerHTML = `
+                <h3>🤖 ${robotId}</h3>
+                <div class="progress-bg"><div id="fill-${robotId}" class="progress-fill"></div></div>
+                <p id="status-${robotId}">${action}</p>
+                <div id="log-${robotId}" class="log"></div>
+            `;
+            fleet.appendChild(card);
+            robots[robotId] = card;
+        }
     
     document.getElementById(`fill-${robotId}`).style.width = `${progress}%`;
     document.getElementById(`status-${robotId}`).innerText = action;
@@ -186,16 +186,14 @@
     logEntry.innerText = `[${new Date().toLocaleTimeString()}] ${action}`;
     logBox.prepend(logEntry);
 
-    if (destination && roomCoords[destination]) {
+    if (destination && roomCoords[destination] && startPos) {
         const target = roomCoords[destination];
-        const startX = 0; 
-        const startY = 0;
-
         const p = progress / 100;
         robotPositions[robotId] = {
-            x: startX + (target.x - startX) * p,
-            y: startY + (target.y - startY) * p
+            x: startPos.x + (target.x - startPos.x) * p,
+            y: startPos.y + (target.y - startPos.y) * p
         };
+
         drawMap(Object.values(roomCoords).map(c => ({
             ...c, 
             name: Object.keys(roomCoords).find(k => roomCoords[k] === c)

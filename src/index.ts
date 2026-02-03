@@ -15,20 +15,20 @@ export class RobotMemory extends DurableObject {
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
 
-    this.ctx.storage.sql.exec(`
-      CREATE TABLE IF NOT EXISTS rooms (name TEXT PRIMARY KEY, x REAL, y REAL);
-      CREATE TABLE IF NOT EXISTS robot_roles (robot_id TEXT PRIMARY KEY, role TEXT);
-      CREATE TABLE IF NOT EXISTS mission_logs (
-        id TEXT PRIMARY KEY,
-        robot_id TEXT,
-        action TEXT,
-        progress INTEGER,
-        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
-      );
-      
-      -- Seed initial map
-      INSERT OR IGNORE INTO rooms VALUES ('Spawner', 0, 0), ('Kitchen', 10, 5), ('Lab', -5, 12);
-    `);
+  this.ctx.storage.sql.exec(`
+    CREATE TABLE IF NOT EXISTS rooms (name TEXT PRIMARY KEY, x REAL, y REAL);
+    CREATE TABLE IF NOT EXISTS robot_roles (robot_id TEXT PRIMARY KEY, role TEXT);
+    -- NEW TABLE: Track live positions
+    CREATE TABLE IF NOT EXISTS robot_positions (robot_id TEXT PRIMARY KEY, x REAL, y REAL);
+    CREATE TABLE IF NOT EXISTS mission_logs (
+      id TEXT PRIMARY KEY,
+      robot_id TEXT,
+      action TEXT,
+      progress INTEGER,
+      timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+    INSERT OR IGNORE INTO rooms VALUES ('Spawner', 0, 0), ('Kitchen', 10, 5), ('Lab', -5, 12);
+  `);
   }
   async deleteRoom(name: string) {
     this.ctx.storage.sql.exec("DELETE FROM rooms WHERE name = ?", name);
@@ -44,7 +44,6 @@ export class RobotMemory extends DurableObject {
     );
   }
 
-  // API: Assign a Role
   async setRole(robotId: string, role: string) {
     this.ctx.storage.sql.exec(
       "INSERT OR REPLACE INTO robot_roles (robot_id, role) VALUES (?, ?)",
@@ -52,15 +51,19 @@ export class RobotMemory extends DurableObject {
     );
   }
 
-  // RPC/Internal: Log Progress
-  async logAction(missionId: string, robotId: string, action: string, progress: number, destination?: string) {
-    this.ctx.storage.sql.exec(
-      "INSERT INTO mission_logs (id, robot_id, action, progress) VALUES (?, ?, ?, ?)",
-      `${missionId}-${Date.now()}`, robotId, action, progress
-    );
-    
-    // Broadcast to dashboard
-    const msg = JSON.stringify({ robotId, action, progress, missionId, destination });
+  async getPosition(robotId: string) {
+  const res = this.ctx.storage.sql.exec("SELECT x, y FROM robot_positions WHERE robot_id = ?", robotId).toArray();
+  return res.length > 0 ? res[0] : { x: 0, y: 0 };
+  }
+
+  async updatePosition(robotId: string, x: number, y: number) {
+    this.ctx.storage.sql.exec("INSERT OR REPLACE INTO robot_positions (robot_id, x, y) VALUES (?, ?, ?)", robotId, x, y);
+  }
+
+  async logAction(missionId: string, robotId: string, action: string, progress: number, destination?: string, startPos?: {x: number, y: number}) {
+    this.ctx.storage.sql.exec("INSERT INTO mission_logs (id, robot_id, action, progress) VALUES (?, ?, ?, ?)", `${missionId}-${Date.now()}`, robotId, action, progress);
+  
+    const msg = JSON.stringify({ robotId, action, progress, missionId, destination, startPos });
     this.ctx.getWebSockets().forEach(ws => ws.send(msg));
   }
 
@@ -92,35 +95,34 @@ export class MissionWorkflow extends WorkflowEntrypoint<Env> {
   async run(event: any, step: WorkflowStep) {
     const { robotId, destination, task } = event.payload;
     const missionId = (this as any).id;
-    
-    const robotStub = this.env.ROBOT_MEMORY.get(this.env.ROBOT_MEMORY.idFromName(robotId));
     const hubStub = this.env.ROBOT_MEMORY.get(this.env.ROBOT_MEMORY.idFromName("CENTRAL_HUB"));
 
-    await step.do('Start Mission', async () => {
-      const msg = `Mission: ${task}`;
-      await hubStub.logAction(missionId, robotId, msg, 0, destination);
-    });
+    const startPos = await step.do('Get Start Position', async () => {
+  const pos = await hubStub.getPosition(robotId);
+  return { 
+    x: Number(pos.x), 
+    y: Number(pos.y) 
+  };
+});
 
     const pathMetrics = await step.do('Calculate Path', async () => {
        const res = await hubStub.fetch("http://do/map");
        const { rooms } = await res.json() as any;
        const target = rooms.find((r: any) => r.name.toLowerCase() === destination?.toLowerCase());
        
-       const travelTime = target ? Math.max(Math.abs(target.x) + Math.abs(target.y), 2) : 5;
-       return { travelTime, targetName: target?.name || "Unknown" };
+       const dist = Math.sqrt(Math.pow(target.x - startPos.x, 2) + Math.pow(target.y - startPos.y, 2));
+       return { travelTime: Math.max(Math.round(dist), 2), target };
     });
 
-    for (let i = 1; i <= pathMetrics.travelTime; i++) {
-      await step.sleep(`Traveling ${i}/${pathMetrics.travelTime}`, "1 second");
-      
+    for (let i = 0; i <= pathMetrics.travelTime; i++) {
       const currentProgress = Math.round((i / pathMetrics.travelTime) * 100);
-      
-      await hubStub.logAction(missionId, robotId, `Moving to ${destination}...`, currentProgress, destination);
+      await hubStub.logAction(missionId, robotId, `Moving to ${destination}...`, currentProgress, destination, startPos);
+      if (i < pathMetrics.travelTime) await step.sleep(`Moving`, "1 second");
     }
     
-    await step.do('Complete', async () => {
-      const msg = `Task Complete at ${destination}`;
-      await hubStub.logAction(missionId, robotId, msg, 100, destination);
+    await step.do('Save Final Position', async () => {
+      await hubStub.updatePosition(robotId, pathMetrics.target.x, pathMetrics.target.y);
+      await hubStub.logAction(missionId, robotId, `Arrived at ${destination}`, 100, destination, startPos);
     });
   }
 }
