@@ -1,25 +1,62 @@
-# Cloudflare Workers OpenAPI 3.1
 
-This is a Cloudflare Worker with OpenAPI 3.1 using [chanfana](https://github.com/cloudflare/chanfana) and [Hono](https://github.com/honojs/hono).
+# Prerequisites
+Cloudflare Account (Free tier works perfectly).
+Node.js installed on your machine.
 
-This is an example project made to be used as a quick start into building OpenAPI compliant Workers that generates the
-`openapi.json` schema automatically from code and validates the incoming request to the defined parameters or request body.
+# Setup
 
-## Get started
+## Clone the repository
+git clone <https://github.com/XavierAG/cf_ai_robot_commander.git>
+cd robot-command-center
 
-1. Sign up for [Cloudflare Workers](https://workers.dev). The free tier is more than enough for most use cases.
-2. Clone this project and install dependencies with `npm install`
-3. Run `wrangler login` to login to your Cloudflare account in wrangler
-4. Run `wrangler deploy` to publish the API to Cloudflare Workers
+## Install dependencies
+npm install
 
-## Project structure
+## Login to Cloudflare
+npx wrangler login
 
-1. Your main router is defined in `src/index.ts`.
-2. Each endpoint has its own file in `src/endpoints/`.
-3. For more information read the [chanfana documentation](https://chanfana.pages.dev/) and [Hono documentation](https://hono.dev/docs).
+## 📡 API Reference
 
-## Development
+The Command Center utilizes a RESTful API built on **Hono** and **Chanfana (OpenAPI)**. All coordinates follow a strict $50 \times 50$ grid constraint ($x, y$ between $-25$ and $25$).
 
-1. Run `wrangler dev` to start a local instance of the API.
-2. Open `http://localhost:8787/` in your browser to see the Swagger interface where you can try the endpoints.
-3. Changes made in the `src/` folder will automatically trigger the server to reload, you only need to refresh the Swagger interface.
+| Endpoint | Method | Input | Description |
+| :--- | :--- | :--- | :--- |
+| `/api/rooms` | **POST** | `{"name": "Kitchen", "x": 10, "y": -5}` | Registers a new location. Validates bounds. |
+| `/api/rooms/:name` | **DELETE** | `name` (URL Param) | Removes a room from the SQL registry. |
+| `/api/roles` | **POST** | `{"robotId": "Billy", "role": "Chef"}` | Assigns a specific role to a robot ID. |
+| `/api/roles/:robotId`| **DELETE** | `robotId` (URL Param) | Removes a robot from the active roster. |
+| `/api/world` | **GET** | *None* | Returns the current map and robot roles. |
+| `/api/command` | **POST** | `{"prompt": "string"}` | Triggers AI parsing and starts a **Mission Workflow**. |
+| `/api/mission/:id` | **GET** | `missionId` (URL Param) | Fetches historical logs for a specific mission. |
+| `/ws` | **GET** | `?robotId=CENTRAL_HUB` | WebSocket entry point for real-time telemetry. |
+
+---
+
+## 🛰️ System Architecture
+
+Our backend architecture ensures that robot states are persistent and movements are smooth.
+
+
+
+1.  **Durable Object (`RobotMemory`)**: A stateful SQLite database that stores room coordinates, robot roles, and current positions.
+2.  **Workflow (`MissionWorkflow`)**: A long-running process that manages robot travel time, calculates Euclidean distance, and emits "heartbeat" updates every second.
+3.  **Real-time Bus**: The Durable Object broadcasts every movement update to all connected WebSockets, allowing the dashboard to render a smooth "glide" across the map.
+
+---
+
+## 🛠️ Testing with cURL
+
+You can test the components directly from your terminal using these commands:
+
+### Create a Room
+```bash
+curl -X POST https://<your-worker>.workers.dev/api/rooms \
+     -H "Content-Type: application/json" \
+     -d '{"name": "Lab", "x": -20, "y": 15}'
+```
+### Deploy a Robot
+```bash
+curl -X POST https://<your-worker>.workers.dev/api/command \
+     -H "Content-Type: application/json" \
+     -d '{"prompt": "Send Billy to the Lab to analyze samples"}'
+```
